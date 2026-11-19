@@ -1,0 +1,8 @@
+# Stretch-model override reference; reduce batch sizes if memory is tight.
+model:
+  name_or_path: Qwen/Qwen3-1.7B
+  revision: null
+  dtype: bfloat16
+  trust_remote_code: true
+  attn_implementation: sdpa
+  local_files_only: true

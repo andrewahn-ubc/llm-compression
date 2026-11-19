@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-compression"
+version = "0.1.0"
+description = "Probe-guided depth compression experiments for decoder-only language models"
+requires-python = ">=3.10"
+dependencies = [
+  "accelerate>=1.2,<2",
+  "datasets>=3.2,<5",
+  "numpy>=1.26,<3",
+  "PyYAML>=6.0,<7",
+  "safetensors>=0.4,<1",
+  "torch>=2.5.1,<3",
+  "tqdm>=4.66,<5",
+  "transformers>=4.57,<4.58",
+]
+
+[project.optional-dependencies]
+eval = ["lm-eval>=0.4.8,<0.5"]
+memory-efficient = ["bitsandbytes>=0.45,<1"]
+dev = [
+  "pytest>=8.0,<10",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+llm-compression = "llm_compression.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]

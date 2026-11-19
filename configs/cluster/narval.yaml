@@ -1,0 +1,13 @@
+# Scheduler reference consumed by humans/scripts, not an experiment config.
+cluster:
+  name: narval
+  account: def-krallen
+  gpu_type: a100
+  gpus_per_node: 1
+  cpus_per_task: 8
+  memory: 96G
+  time: "01:55:00"
+  signal: B:USR1@300
+  module_stack:
+    - StdEnv/2023
+    - python/3.11

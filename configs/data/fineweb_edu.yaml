@@ -1,0 +1,18 @@
+# Override reference; the counts total about 32M tokens at sequence length 512.
+data:
+  dataset_name: HuggingFaceFW/fineweb-edu
+  dataset_config: sample-10BT
+  split: train
+  text_column: text
+  sequence_length: 512
+  probe_train_sequences: 96
+  probe_validation_sequences: 32
+  local_train_sequences: 20480
+  local_validation_sequences: 512
+  global_train_sequences: 40960
+  global_validation_sequences: 512
+  seed: 360
+  num_proc: 8
+  streaming: true
+  disjoint_slices: true
+  shuffle_buffer_size: 10000

@@ -1,0 +1,144 @@
+run_name: qwen3_0_6b_ablations
+seed: 360
+
+model:
+  name_or_path: Qwen/Qwen3-0.6B
+  revision: null
+  dtype: bfloat16
+  trust_remote_code: true
+  attn_implementation: sdpa
+  local_files_only: true
+
+data:
+  dataset_name: HuggingFaceFW/fineweb-edu
+  dataset_config: sample-10BT
+  split: train
+  text_column: text
+  sequence_length: 512
+  probe_train_sequences: 96
+  probe_validation_sequences: 32
+  local_train_sequences: 20480
+  local_validation_sequences: 512
+  global_train_sequences: 40960
+  global_validation_sequences: 512
+  seed: 360
+  num_proc: 8
+  streaming: true
+  disjoint_slices: true
+  shuffle_buffer_size: 10000
+  cache_teacher_boundaries: true
+
+stage1:
+  enabled: true
+  method: probe_guided_greedy
+  scan_direction: front_to_back
+  initialization: swm
+  protected_prefix_layers: 2
+  protected_suffix_layers: 1
+  min_group_size: 2
+  max_group_size: 4
+  threshold: 0.15
+  threshold_grid: [0.05, 0.10, 0.15, 0.20, 0.30]
+  target_removed_fractions: [0.20, 0.35]
+  target_removed_layers: 6
+  probe_steps: 50
+  long_probe_steps: 300
+  batch_size: 16
+  learning_rate: 1.0e-5
+  training_dtype: float32
+  loss: relative_hidden_state_mse
+  input_mode: mixed
+  mixed_lambda: 0.5
+
+stage2:
+  enabled: true
+  order: front_to_back
+  steps_per_group: 300
+  batch_size: 16
+  learning_rate: 1.0e-5
+  training_dtype: float32
+  lambda_start: 1.0
+  lambda_end: 0.5
+  lambda_schedule: linear
+  eval_every: 25
+  validation_batches: 4
+  patience: 4
+  loss:
+    hidden_state: true
+    causal_lm: false
+
+stage3:
+  enabled: true
+  steps: 3000
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 1.0e-5
+  warmup_steps: 100
+  temperature: 1.0
+  train_scope: all
+  gradient_checkpointing: true
+  use_8bit_optimizer: true
+  eval_every: 50
+  validation_batches: 16
+  patience: 6
+  objective: logits_kl
+
+runtime:
+  device: auto
+  seed: 360
+  deterministic: true
+  num_workers: 4
+  log_every: 10
+  offline: true
+  resume: auto
+  checkpoint_on_signal: true
+  max_steps_this_job: 250
+  walltime: "01:55:00"
+  signal_seconds_before_end: 300
+
+paths:
+  output_dir: outputs
+  cache_dir: cache
+  data_cache_dir: cache/data
+  checkpoint_dir: checkpoints
+
+evaluation:
+  perplexity:
+    dataset_name: wikitext
+    dataset_config: wikitext-2-raw-v1
+    split: test
+    sequence_length: 512
+  zero_shot_tasks:
+    - boolq
+    - piqa
+    - hellaswag
+    - winogrande
+    - arc_easy
+    - arc_challenge
+    - openbookqa
+  five_shot_tasks:
+    - mmlu
+  batch_size: auto
+  measures:
+    - accuracy
+    - perplexity
+    - parameter_count
+    - generation_latency
+    - peak_gpu_memory
+
+ablations:
+  compression_targets: [0.20, 0.35]
+  axes:
+    selection_score:
+      - trained_probe
+      - untrained_merge
+      - swm_global_similarity
+    stage1_input_mode:
+      - mixed
+      - teacher
+    probe_steps: [50, 300]
+    stage2_loss:
+      - teacher_only
+      - fixed_lambda_0_5
+      - scheduled_lambda_1_to_0_5
+    stage3_enabled: [false, true]

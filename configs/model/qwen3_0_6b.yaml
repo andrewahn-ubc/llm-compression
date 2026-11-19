@@ -1,0 +1,8 @@
+# Override reference; configs/main.yaml is the standalone runnable experiment.
+model:
+  name_or_path: Qwen/Qwen3-0.6B
+  revision: null
+  dtype: bfloat16
+  trust_remote_code: true
+  attn_implementation: sdpa
+  local_files_only: true
