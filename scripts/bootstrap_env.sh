@@ -13,6 +13,11 @@ Options:
   --without-8bit       Skip memory-efficient optional dependencies
   --dry-run            Print commands without executing them
   -h, --help           Show this help
+
+Environment:
+  LLMC_GCC_MODULE      Alliance GCC module (default: gcc)
+  LLMC_ARROW_MODULE    Alliance Arrow module (default: arrow/23.0.1)
+  LLMC_PYTHON_MODULE   Alliance Python module (default: python/3.11)
 USAGE
 }
 
@@ -22,6 +27,9 @@ venv_path="${LLMC_VENV:-${repo_root}/.venv}"
 requirements_path=""
 extras="eval,memory-efficient"
 dry_run=0
+gcc_module="${LLMC_GCC_MODULE:-gcc}"
+arrow_module="${LLMC_ARROW_MODULE:-arrow/23.0.1}"
+python_module="${LLMC_PYTHON_MODULE:-python/3.11}"
 
 while (($#)); do
   case "$1" in
@@ -65,14 +73,41 @@ run() {
   fi
 }
 
-if type module >/dev/null 2>&1; then
+if [[ -n "${SCRATCH:-}" ]]; then
+  : "${VIRTUALENV_OVERRIDE_APP_DATA:=${SCRATCH}/.cache/virtualenv}"
+  : "${PIP_CACHE_DIR:=${SCRATCH}/.cache/pip}"
+  export VIRTUALENV_OVERRIDE_APP_DATA PIP_CACHE_DIR
+  run mkdir -p "${VIRTUALENV_OVERRIDE_APP_DATA}" "${PIP_CACHE_DIR}"
+fi
+
+if ((dry_run)) || type module >/dev/null 2>&1; then
   run module --force purge
-  run module load StdEnv/2023 python/3.11
+  run module load StdEnv/2023
+  run module load "${gcc_module}" "${arrow_module}" "${python_module}"
 else
   echo "warning: Environment Modules is unavailable; using the current Python" >&2
 fi
 
-if [[ ! -x "${venv_path}/bin/python" ]]; then
+if ((!dry_run)) && ! python -c \
+  'import pyarrow; assert int(pyarrow.__version__.split(".")[0]) >= 21' >/dev/null 2>&1; then
+  cat >&2 <<EOF
+PyArrow 21 or newer is not visible through ${arrow_module} for ${python_module}.
+Run 'module spider pyarrow' to find a compatible Arrow version, then retry with,
+for example: export LLMC_ARROW_MODULE=arrow/X.Y.Z
+EOF
+  exit 1
+fi
+
+venv_ready=0
+if [[ -x "${venv_path}/bin/python" ]]; then
+  if ((dry_run)) || "${venv_path}/bin/python" -m pip --version >/dev/null 2>&1; then
+    venv_ready=1
+  fi
+fi
+
+if ((dry_run)); then
+  run virtualenv --no-download "${venv_path}"
+elif ((!venv_ready)); then
   if ! command -v virtualenv >/dev/null 2>&1; then
     echo "virtualenv is unavailable; load the Alliance Python module first" >&2
     exit 1
@@ -88,6 +123,16 @@ else
   python_bin="$(command -v python)"
 fi
 
+if ((!dry_run)) && ! "${python_bin}" -c \
+  'import pyarrow; assert int(pyarrow.__version__.split(".")[0]) >= 21' >/dev/null 2>&1; then
+  cat >&2 <<EOF
+PyArrow 21 or newer is not visible through ${arrow_module} for the virtual environment.
+Run 'module spider pyarrow' to find a compatible Arrow version, then retry with,
+for example: export LLMC_ARROW_MODULE=arrow/X.Y.Z
+EOF
+  exit 1
+fi
+
 # Fir H100 nodes require PyTorch 2.5.1 or newer. The same environment is safe on Narval.
 run "${python_bin}" -m pip install --no-index 'torch>=2.5.1,<3'
 
@@ -100,6 +145,14 @@ run "${python_bin}" -m pip install --no-index --no-build-isolation \
   --editable "${repo_root}[${extras}]"
 
 if ((!dry_run)); then
-  "${python_bin}" -c 'import torch; print(f"environment ready: torch={torch.__version__}, cuda={torch.version.cuda}")'
+  "${python_bin}" - <<'PY'
+import pyarrow
+import torch
+
+print(
+    f"environment ready: torch={torch.__version__}, "
+    f"cuda={torch.version.cuda}, pyarrow={pyarrow.__version__}"
+)
+PY
   printf 'Activate with: source %q\n' "${venv_path}/bin/activate"
 fi

@@ -61,10 +61,25 @@ export LLMC_CACHE_ROOT="$SCRATCH/llm-compression/cache"
   --cache-root "$LLMC_CACHE_ROOT"
 ```
 
-The bootstrap script loads `StdEnv/2023` and `python/3.11`, creates a virtualenv with
-`--no-download`, and installs from the Alliance wheelhouse with `--no-index`. It asks
-for PyTorch 2.5.1 or newer because that is the minimum documented for H100 support on
-Fir. See [standard software environments](https://docs.alliancecan.ca/wiki/Standard_software_environments),
+The bootstrap script loads `StdEnv/2023`, `gcc`, `arrow/23.0.1`, and `python/3.11` before it
+creates the virtualenv. Alliance supplies PyArrow through the Arrow module and places a
+deliberately non-installable PyArrow placeholder in its wheelhouse, so the module must
+also be loaded by every compute job. Both the bootstrap and runtime scripts do this.
+The pinned module is available on both Narval and Fir and satisfies the PyArrow 21+
+requirement of the resolved Datasets package. To use a later compatible module:
+
+```bash
+module spider pyarrow
+export LLMC_ARROW_MODULE=arrow/X.Y.Z
+./scripts/bootstrap_env.sh --venv "$LLMC_VENV"
+```
+
+When `$SCRATCH` is defined, bootstrap also puts the virtualenv application data and pip
+cache under scratch instead of the quota-limited home directory. It creates the virtualenv
+with `--no-download` and installs from the Alliance wheelhouse with `--no-index`. It asks
+for PyTorch 2.5.1 or newer because that is the minimum documented for H100 support on Fir.
+See [Arrow](https://docs.alliancecan.ca/wiki/Arrow),
+[standard software environments](https://docs.alliancecan.ca/wiki/Standard_software_environments),
 [Python environments](https://docs.alliancecan.ca/wiki/Python), and
 [PyTorch](https://docs.alliancecan.ca/wiki/PyTorch).
 

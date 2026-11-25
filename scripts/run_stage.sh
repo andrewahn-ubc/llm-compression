@@ -60,7 +60,10 @@ fi
 
 if type module >/dev/null 2>&1; then
   module --force purge
-  module load StdEnv/2023 python/3.11
+  module load StdEnv/2023
+  module load "${LLMC_GCC_MODULE:-gcc}" \
+    "${LLMC_ARROW_MODULE:-arrow/23.0.1}" \
+    "${LLMC_PYTHON_MODULE:-python/3.11}"
 fi
 
 venv_path="${LLMC_VENV:-${repo_root}/.venv}"
@@ -69,6 +72,12 @@ venv_path="${LLMC_VENV:-${repo_root}/.venv}"
   exit 1
 }
 python_bin="${venv_path}/bin/python"
+
+if ! "${python_bin}" -c \
+  'import pyarrow; assert int(pyarrow.__version__.split(".")[0]) >= 21' >/dev/null 2>&1; then
+  echo "PyArrow 21+ is unavailable; set LLMC_ARROW_MODULE to a compatible module" >&2
+  exit 1
+fi
 
 if [[ -n "${SCRATCH:-}" ]]; then
   work_root="${LLMC_WORK_ROOT:-${SCRATCH}/llm-compression}"
