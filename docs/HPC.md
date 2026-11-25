@@ -1,6 +1,6 @@
 # Running the experiments on Narval or Fir
 
-The launchers use one full GPU for `01:55:00`, ask Slurm to send `USR1` five minutes
+The launchers use one full GPU for `01:00:00`, ask Slurm to send `USR1` five minutes
 before the limit, and run with network access disabled. The same experiment YAML can
 therefore be used on either cluster; only the Slurm wrapper changes.
 
@@ -18,7 +18,7 @@ CCDB before first use. Alliance recommends the typed
 `--gpus-per-node=a100:1` / `--gpus-per-node=h100:1` syntax used here; see
 [Using GPUs with Slurm](https://docs.alliancecan.ca/wiki/Using_GPUs_with_Slurm).
 
-Every job has a hard wall-clock request below two hours. Short requests can also fit
+Every job has a one-hour wall-clock request. Short requests can also fit
 backfill opportunities more readily; see the Alliance
 [job scheduling policies](https://docs.alliancecan.ca/wiki/Job_scheduling_policies)
 and [job-submission best practices](https://docs.alliancecan.ca/wiki/Best_practices_for_job_submission).
@@ -138,7 +138,7 @@ Jobs are linked with `afterok`, so a failed stage stops its dependants. Stage 2 
 one job per possible merge group; once all selected groups are complete, later chunks
 exit quickly. Stage 3's 12 chunks cover the configured 3,000 steps. Evaluation is
 split into perplexity, commonsense harness, MMLU harness, generation, speed, and final
-summary jobs so the full task suite is not forced into one two-hour allocation. The exact
+summary jobs so the full task suite is not forced into one monolithic allocation. The exact
 retained Stage 2 model is evaluated before the Stage 3 model, without retraining Stage 2. The
 teacher is evaluated separately so both summaries include the required seven-task relative
 accuracy. The default dry-run contains 51 jobs. Adjust the chunk counts without editing a
@@ -223,7 +223,7 @@ The ablation launcher is dry-run by default and covers trained/untrained selecti
 Review all generated commands, then add `--submit`. The SWM global-similarity
 selector cell comes from the baseline launcher with matched recovery. The 300-step
 probe cannot resume inside a threshold scan and is the one cell that may need a
-separately approved longer limit if cluster timing shows it cannot finish in 1:55.
+separately approved longer limit if cluster timing shows it cannot finish in 1:00.
 
 To run a single command directly, create the log directory first and use the matching
 wrapper:

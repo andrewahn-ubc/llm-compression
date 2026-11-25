@@ -35,8 +35,8 @@ Options:
   --dry-run                  Print sbatch commands without submitting
   -h, --help                 Show this help
 
-The default chunk sizes target jobs shorter than 2 hours. If a job approaches
-the 01:55 limit, the Slurm USR1 handler checkpoints it and the next chunk resumes.
+The default chunk sizes target jobs shorter than 1 hour. If a job approaches
+the 01:00 limit, the Slurm USR1 handler checkpoints it and the next chunk resumes.
 USAGE
 }
 
@@ -260,7 +260,7 @@ submit_job() {
     "--account=${account}"
     "--job-name=llmc-${label}"
     "--chdir=${repo_root}"
-    --time=01:55:00
+    --time=01:00:00
     --signal=B:USR1@300
     "--export=ALL,LLMC_OUTPUT_ROOT=${output_root}"
   )

@@ -9,5 +9,5 @@ runtime:
   resume: auto
   checkpoint_on_signal: true
   max_steps_this_job: 250
-  walltime: "01:55:00"
+  walltime: "01:00:00"
   signal_seconds_before_end: 300

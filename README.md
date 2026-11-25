@@ -54,7 +54,7 @@ override `--account` if it differs.
   --dry-run
 ```
 
-Remove `--dry-run` to submit. Every GPU job requests `01:55:00` and receives a pre-timeout
+Remove `--dry-run` to submit. Every GPU job requests `01:00:00` and receives a pre-timeout
 signal five minutes before the limit. Stages 2, 3, and LoRA recovery checkpoint and resume;
 Stage 1 is split one threshold value per job.
 
@@ -116,7 +116,7 @@ Every end-to-end pipeline evaluates the exact retained Stage 2 checkpoint into
 `evaluation/student`; the comparison does not retrain Stage 2. The SWM global-similarity
 selector comparison is produced by the baseline launcher with
 `--recovery same`. The 300-step probe is intentionally included, but unlike the other training
-stages it cannot resume within one threshold scan; if it exceeds 1:55 in practice, lower the
+stages it cannot resume within one threshold scan; if it exceeds 1:00 in practice, lower the
 calibration slice for that feasibility ablation or give it a separately approved longer limit.
 
 ## Outputs and reproducibility

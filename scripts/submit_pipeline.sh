@@ -124,7 +124,7 @@ submit_job() {
     "--account=${account}"
     "--job-name=llmc-${label}"
     "--chdir=${repo_root}"
-    --time=01:55:00
+    --time=01:00:00
     --signal=B:USR1@300
   )
   if [[ -n "${dependency}" ]]; then
