@@ -56,7 +56,7 @@ export LLMC_VENV=/path/on/this/cluster/to/llmc-venv
 ./scripts/bootstrap_env.sh --venv "$LLMC_VENV"
 
 export LLMC_CACHE_ROOT="$SCRATCH/llm-compression/cache"
-"$LLMC_VENV/bin/python" scripts/prefetch.py \
+./scripts/prefetch.sh \
   --config configs/main.yaml \
   --cache-root "$LLMC_CACHE_ROOT"
 ```
@@ -69,7 +69,7 @@ The pinned module is available on both Narval and Fir and satisfies the PyArrow 
 requirement of the resolved Datasets package. To use a later compatible module:
 
 ```bash
-module spider pyarrow
+module spider arrow
 export LLMC_ARROW_MODULE=arrow/X.Y.Z
 ./scripts/bootstrap_env.sh --venv "$LLMC_VENV"
 ```
@@ -83,7 +83,10 @@ See [Arrow](https://docs.alliancecan.ca/wiki/Arrow),
 [Python environments](https://docs.alliancecan.ca/wiki/Python), and
 [PyTorch](https://docs.alliancecan.ca/wiki/PyTorch).
 
-`prefetch.py` downloads the model/tokenizer snapshot, WikiText-2 test data, and the
+`prefetch.sh` reloads the same compiler, Arrow, and Python modules used to create the
+environment, then runs `prefetch.py`. This wrapper is necessary because module changes made
+inside `bootstrap_env.sh` do not persist in the parent login shell. It downloads the
+model/tokenizer snapshot, WikiText-2 test data, and the
 lm-eval datasets for BoolQ, PIQA, HellaSwag, WinoGrande, ARC, OpenBookQA, and MMLU. It
 also invokes the bounded FineWeb `prepare-data` command while login-node network
 access is available. lm-eval materialization is best-effort because its task API can

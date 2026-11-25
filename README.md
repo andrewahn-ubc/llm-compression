@@ -29,7 +29,7 @@ export LLMC_VENV=/path/to/llmc-venv
 ./scripts/bootstrap_env.sh --venv "$LLMC_VENV"
 
 export LLMC_CACHE_ROOT="$SCRATCH/llm-compression/cache"
-"$LLMC_VENV/bin/python" scripts/prefetch.py \
+./scripts/prefetch.sh \
   --config configs/main.yaml \
   --cache-root "$LLMC_CACHE_ROOT"
 ```

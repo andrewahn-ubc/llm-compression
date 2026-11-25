@@ -92,7 +92,7 @@ if ((!dry_run)) && ! python -c \
   'import pyarrow; assert int(pyarrow.__version__.split(".")[0]) >= 21' >/dev/null 2>&1; then
   cat >&2 <<EOF
 PyArrow 21 or newer is not visible through ${arrow_module} for ${python_module}.
-Run 'module spider pyarrow' to find a compatible Arrow version, then retry with,
+Run 'module spider arrow' to find a compatible Arrow version, then retry with,
 for example: export LLMC_ARROW_MODULE=arrow/X.Y.Z
 EOF
   exit 1
@@ -127,7 +127,7 @@ if ((!dry_run)) && ! "${python_bin}" -c \
   'import pyarrow; assert int(pyarrow.__version__.split(".")[0]) >= 21' >/dev/null 2>&1; then
   cat >&2 <<EOF
 PyArrow 21 or newer is not visible through ${arrow_module} for the virtual environment.
-Run 'module spider pyarrow' to find a compatible Arrow version, then retry with,
+Run 'module spider arrow' to find a compatible Arrow version, then retry with,
 for example: export LLMC_ARROW_MODULE=arrow/X.Y.Z
 EOF
   exit 1
