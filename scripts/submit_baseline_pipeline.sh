@@ -3,10 +3,15 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/submit_baseline_pipeline.sh --cluster narval|fir [options]
+Usage: scripts/submit_baseline_pipeline.sh --cluster narval|fir|local [options]
 
 Builds all equal-depth baselines from a completed main-run Stage 1 layout.
 Recovery and evaluation are opt-in because the full matrix submits many jobs.
+
+--cluster local runs the same job graph in order on this machine's GPU instead
+of submitting it to Slurm (see scripts/lib/local_backend.sh). --account is then
+ignored, --after is rejected, a failed job stops the run, and re-running the
+command skips jobs that already succeeded.
 
 Options:
   --config PATH              Standalone baseline YAML (default: configs/baselines.yaml)
@@ -15,10 +20,10 @@ Options:
   --main-layout PATH         Use this Stage 1 layout instead of --main-run
   --suite-name NAME          Prefix for isolated variant run directories
                              (default: qwen3_0_6b_baselines)
-  --account NAME             Slurm account (default: def-krallen)
+  --account NAME             Slurm account (default: def-krallen; ignored locally)
   --output-root PATH         Must match LLMC_OUTPUT_ROOT used by run_stage.sh
   --after JOBID              Wait for a main-pipeline tail job (also permits a
-                             layout that does not exist yet)
+                             layout that does not exist yet; Slurm only)
   --recovery MODE            none, xmerge-local, swm-lora, same, or all
                              (default: none)
                              xmerge-local: teacher-only Stage 2 reconstruction
@@ -32,7 +37,7 @@ Options:
   --lora-chunks N            Resume-safe SWM LoRA jobs (default: 4)
   --lora-max-steps N         Optimizer steps per LoRA job (default: 250)
   --set KEY=VALUE            Apply a non-routing override to every job; repeatable
-  --dry-run                  Print sbatch commands without submitting
+  --dry-run                  Print the job commands without submitting or running them
   -h, --help                 Show this help
 
 The default chunk sizes target jobs shorter than 1 hour. If a job approaches
@@ -73,7 +78,7 @@ safe_name() {
 while (($#)); do
   case "$1" in
     --cluster)
-      [[ $# -ge 2 ]] || { echo "--cluster requires narval or fir" >&2; exit 2; }
+      [[ $# -ge 2 ]] || { echo "--cluster requires narval, fir, or local" >&2; exit 2; }
       cluster="$2"
       shift 2
       ;;
@@ -180,9 +185,14 @@ while (($#)); do
 done
 
 case "${cluster}" in
-  narval|fir) ;;
-  *) echo "--cluster must be narval or fir" >&2; exit 2 ;;
+  narval|fir|local) ;;
+  *) echo "--cluster must be narval, fir, or local" >&2; exit 2 ;;
 esac
+if [[ "${cluster}" == "local" && -n "${after_job}" ]]; then
+  echo "--after waits on a Slurm job and cannot be used with --cluster local;" >&2
+  echo "run the main pipeline locally first, then this launcher." >&2
+  exit 2
+fi
 case "${recovery_mode}" in
   none|xmerge-local|swm-lora|same|all) ;;
   *) echo "--recovery must be none, xmerge-local, swm-lora, same, or all" >&2; exit 2 ;;
@@ -244,9 +254,15 @@ elif ! grep -q '"removed_layers"' "${main_layout}" || ! grep -q '"spans"' "${mai
   exit 1
 fi
 
-wrapper="${repo_root}/scripts/slurm/run_${cluster}.sbatch"
-[[ -f "${wrapper}" ]] || { echo "Slurm wrapper not found: ${wrapper}" >&2; exit 1; }
-mkdir -p "${repo_root}/logs/slurm"
+if [[ "${cluster}" == "local" ]]; then
+  # shellcheck source=lib/local_backend.sh
+  source "${repo_root}/scripts/lib/local_backend.sh"
+  wrapper="${repo_root}/scripts/local/run_local.sh"
+else
+  wrapper="${repo_root}/scripts/slurm/run_${cluster}.sbatch"
+  mkdir -p "${repo_root}/logs/slurm"
+fi
+[[ -f "${wrapper}" ]] || { echo "Job wrapper not found: ${wrapper}" >&2; exit 1; }
 
 submitted_job_id=""
 dry_counter=0
@@ -255,6 +271,29 @@ submit_job() {
   local command_name="$2"
   local dependency="$3"
   shift 3
+  if [[ "${cluster}" == "local" ]]; then
+    # Same override order as the Slurm branch below: user overrides, then
+    # routing overrides, then the pinned output root.
+    local local_command=(
+      env "LLMC_OUTPUT_ROOT=${output_root}"
+      "${wrapper}" "${command_name}" "${config_path}" --set runtime.resume=auto
+    )
+    local local_override
+    if ((global_override_count)); then
+      for local_override in "${global_overrides[@]}"; do
+        local_command+=(--set "${local_override}")
+      done
+    fi
+    for local_override in "$@"; do
+      local_command+=(--set "${local_override}")
+    done
+    local_command+=(--set "paths.output_dir=${output_root}")
+    llmc_run_local_job "${repo_root}" "${output_root}" "${dry_run}" "${label}" \
+      "${config_path}" "${local_command[@]}"
+    dry_counter=$((dry_counter + 1))
+    submitted_job_id="local${dry_counter}"
+    return
+  fi
   local sbatch_command=(
     sbatch --parsable
     "--account=${account}"
@@ -527,6 +566,14 @@ if [[ "${evaluate_mode}" == "recovered" || "${evaluate_mode}" == "all" ]]; then
   done
 fi
 
+if [[ "${cluster}" == "local" ]]; then
+  if ((dry_run)); then
+    echo "local baseline pipeline: ${dry_counter} jobs (dry run)"
+  else
+    echo "local baseline pipeline complete: ${dry_counter} jobs"
+  fi
+  exit 0
+fi
 echo "baseline construction jobs: ${build_ids[*]}"
 if [[ -n "${teacher_eval_tail}" ]]; then
   echo "teacher evaluation tail: ${teacher_eval_tail}"

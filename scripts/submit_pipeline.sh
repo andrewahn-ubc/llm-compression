@@ -3,16 +3,21 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/submit_pipeline.sh --cluster narval|fir [options]
+Usage: scripts/submit_pipeline.sh --cluster narval|fir|local [options]
+
+--cluster local runs the same job graph in order on this machine's GPU instead
+of submitting it to Slurm (see scripts/lib/local_backend.sh). --account is then
+ignored, a failed job stops the run, and re-running the command skips jobs that
+already succeeded.
 
 Options:
   --config PATH          Standalone experiment YAML (default: configs/main.yaml)
-  --account NAME         Slurm account (default: def-krallen)
+  --account NAME         Slurm account (default: def-krallen; ignored locally)
   --stage1-chunks N      At most one threshold scan per job (default: 5)
   --stage2-chunks N      One merge group per job (default: 14)
   --stage3-chunks N      At most 250 global steps per job (default: 12; 0 skips)
   --set KEY=VALUE        Apply an override to every stage; repeatable
-  --dry-run              Print sbatch commands without submitting
+  --dry-run              Print the job commands without submitting or running them
   -h, --help             Show this help
 USAGE
 }
@@ -40,7 +45,7 @@ nonnegative_integer() {
 while (($#)); do
   case "$1" in
     --cluster)
-      [[ $# -ge 2 ]] || { echo "--cluster requires narval or fir" >&2; exit 2; }
+      [[ $# -ge 2 ]] || { echo "--cluster requires narval, fir, or local" >&2; exit 2; }
       cluster="$2"
       shift 2
       ;;
@@ -97,8 +102,8 @@ while (($#)); do
 done
 
 case "${cluster}" in
-  narval|fir) ;;
-  *) echo "--cluster must be narval or fir" >&2; exit 2 ;;
+  narval|fir|local) ;;
+  *) echo "--cluster must be narval, fir, or local" >&2; exit 2 ;;
 esac
 positive_integer "${stage2_chunks}" || { echo "--stage2-chunks must be positive" >&2; exit 2; }
 nonnegative_integer "${stage3_chunks}" || { echo "--stage3-chunks must be non-negative" >&2; exit 2; }
@@ -109,8 +114,15 @@ if [[ "${config_path}" != /* ]]; then
   config_path="${repo_root}/${config_path}"
 fi
 [[ -f "${config_path}" ]] || { echo "Config not found: ${config_path}" >&2; exit 1; }
-wrapper="${repo_root}/scripts/slurm/run_${cluster}.sbatch"
-mkdir -p "${repo_root}/logs/slurm"
+if [[ "${cluster}" == "local" ]]; then
+  # shellcheck source=lib/local_backend.sh
+  source "${repo_root}/scripts/lib/local_backend.sh"
+  wrapper="${repo_root}/scripts/local/run_local.sh"
+  local_output_root="$(llmc_local_output_root "${repo_root}")"
+else
+  wrapper="${repo_root}/scripts/slurm/run_${cluster}.sbatch"
+  mkdir -p "${repo_root}/logs/slurm"
+fi
 
 last_job_id=""
 dry_counter=0
@@ -119,6 +131,23 @@ submit_job() {
   local command_name="$2"
   local dependency="$3"
   shift 3
+  if [[ "${cluster}" == "local" ]]; then
+    local local_command=("${wrapper}" "${command_name}" "${config_path}" --set runtime.resume=auto)
+    local local_override
+    if ((global_override_count)); then
+      for local_override in "${global_overrides[@]}"; do
+        local_command+=(--set "${local_override}")
+      done
+    fi
+    for local_override in "$@"; do
+      local_command+=(--set "${local_override}")
+    done
+    llmc_run_local_job "${repo_root}" "${local_output_root}" "${dry_run}" "${label}" \
+      "${config_path}" "${local_command[@]}"
+    dry_counter=$((dry_counter + 1))
+    last_job_id="local${dry_counter}"
+    return
+  fi
   local sbatch_command=(
     sbatch --parsable
     "--account=${account}"
@@ -224,4 +253,12 @@ if ((stage3_chunks)); then
     previous="${last_job_id}"
   done
 fi
-echo "pipeline tail: ${last_job_id}"
+if [[ "${cluster}" == "local" ]]; then
+  if ((dry_run)); then
+    echo "local pipeline: ${dry_counter} jobs (dry run)"
+  else
+    echo "local pipeline complete: ${dry_counter} jobs"
+  fi
+else
+  echo "pipeline tail: ${last_job_id}"
+fi

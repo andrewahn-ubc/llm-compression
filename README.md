@@ -73,6 +73,43 @@ ten-block context target separately so artifacts cannot collide:
 Stage 1 records whether the threshold grid reached the requested depth exactly. All downstream
 baselines consume that realized layout and enforce the same number of removed blocks.
 
+## Running on a local GPU
+
+The same launchers run on a workstation GPU (for example an RTX 4090) with `--cluster local`.
+They build the same job graph as on Slurm, with the same flags, chunking, and `runtime.*`
+overrides, and run its jobs one after another in the foreground on this machine. `--account`
+is accepted and ignored. Jobs go through `scripts/local/run_local.sh`, the local counterpart
+of the `.sbatch` wrappers.
+
+```bash
+pip install -e '.[dev,eval,memory-efficient]'    # bootstrap_env.sh is Alliance-only
+./scripts/prefetch.sh --config configs/main.yaml # caches go to .local/cache by default
+
+./scripts/submit_pipeline.sh --cluster local --config configs/main.yaml --dry-run
+./scripts/submit_pipeline.sh --cluster local --config configs/main.yaml
+
+# A single step, the local equivalent of `sbatch scripts/slurm/run_narval.sbatch ...`
+./scripts/local/run_local.sh stage1 configs/main.yaml --set run_name=qwen3_0_6b_probe_merge
+```
+
+`submit_baseline_pipeline.sh` and `submit_ablation_sweep.sh` accept `--cluster local` in the
+same way. `--after JOBID` is Slurm-only, so run the main pipeline locally before the baselines.
+
+- **Paths.** Without `$SCRATCH`, caches, outputs, and checkpoints live under `.local/`.
+  Override them with `LLMC_WORK_ROOT`, `LLMC_CACHE_ROOT`, or `LLMC_OUTPUT_ROOT`. Each job
+  logs to `logs/local/llmc-<label>.log`. Choose a GPU with `CUDA_VISIBLE_DEVICES`.
+- **Failures and resuming.** The first failed job stops the launcher. Every job that
+  succeeds is recorded in `<output root>/.local_jobs/`, keyed by its exact command line and
+  the config file's contents, so re-running the same launcher command skips finished jobs.
+  Set `LLMC_LOCAL_RERUN=1` to run everything again.
+- **Ctrl-C.** The first Ctrl-C asks the running job to checkpoint, the same path as Slurm's
+  pre-timeout `USR1`. Stages 2 and 3 and LoRA recovery resume from that checkpoint when you
+  re-run the command. A second Ctrl-C kills the job immediately.
+- **Memory.** A 24 GB card has less memory than an A100 (40 GB) or H100 (80 GB). If a stage
+  runs out of memory, lower its batch size with `--set` (for example
+  `--set stage2.batch_size=8`). Note that this changes the experiment compared with a
+  cluster run.
+
 ## Baselines and ablations
 
 Run baselines only after the main run has produced `stage1/layout.json`. The full baseline
@@ -160,7 +197,7 @@ references, see [docs/HPC.md](docs/HPC.md).
 ```bash
 python -m compileall -q src tests
 python -m pytest
-bash -n scripts/*.sh scripts/slurm/*.sbatch
+bash -n scripts/*.sh scripts/lib/*.sh scripts/local/*.sh scripts/slurm/*.sbatch
 ```
 
 No cluster job is submitted by repository setup or by either dry-run command.
