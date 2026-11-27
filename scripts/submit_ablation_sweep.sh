@@ -3,17 +3,18 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/submit_ablation_sweep.sh --cluster narval|fir [options]
+Usage: scripts/submit_ablation_sweep.sh --cluster narval|fir|local [options]
 
 Prints a proposal-focused, one-factor-at-a-time ablation sweep by default.
-Pass --submit to enqueue the generated end-to-end pipelines.
+Pass --submit to enqueue the generated end-to-end pipelines. With --cluster
+local, --submit runs the variants one after another on this machine's GPU.
 
 Options:
   --config PATH          Standalone ablation YAML (default: configs/ablations.yaml)
   --prefix NAME          Unique run-name prefix (default: qwen3_0_6b_ablation)
-  --account NAME         Slurm account (default: def-krallen)
+  --account NAME         Slurm account (default: def-krallen; ignored locally)
   --set KEY=VALUE        Apply an override to every variant; repeatable
-  --submit               Submit jobs (default is a dry run)
+  --submit               Submit (or, locally, run) jobs (default is a dry run)
   -h, --help             Show this help
 
 Variants:
@@ -47,7 +48,7 @@ safe_name() {
 while (($#)); do
   case "$1" in
     --cluster)
-      [[ $# -ge 2 ]] || { echo "--cluster requires narval or fir" >&2; exit 2; }
+      [[ $# -ge 2 ]] || { echo "--cluster requires narval, fir, or local" >&2; exit 2; }
       cluster="$2"
       shift 2
       ;;
@@ -94,8 +95,8 @@ while (($#)); do
 done
 
 case "${cluster}" in
-  narval|fir) ;;
-  *) echo "--cluster must be narval or fir" >&2; exit 2 ;;
+  narval|fir|local) ;;
+  *) echo "--cluster must be narval, fir, or local" >&2; exit 2 ;;
 esac
 safe_name "${prefix}" || { echo "--prefix contains unsafe path characters" >&2; exit 2; }
 [[ -n "${account}" ]] || { echo "--account cannot be empty" >&2; exit 2; }

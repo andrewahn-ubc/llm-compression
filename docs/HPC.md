@@ -4,6 +4,9 @@ The launchers use one full GPU for `01:00:00`, ask Slurm to send `USR1` five min
 before the limit, and run with network access disabled. The same experiment YAML can
 therefore be used on either cluster; only the Slurm wrapper changes.
 
+To run the same experiments on a workstation GPU instead, pass `--cluster local`; see
+"Running on a local GPU" in the [README](../README.md#running-on-a-local-gpu).
+
 ## Cluster choice
 
 | Cluster | Requested GPU | GPU memory | Launcher | Requested CPU/RAM |

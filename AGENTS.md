@@ -4,7 +4,7 @@ Guidance for AI coding agents (Codex, Claude Code, Cursor, Copilot, Gemini CLI, 
 
 ## Project
 
-Probe-guided depth compression for decoder-only LMs (primary: Qwen3-0.6B, 28 blocks; stretch: Qwen3-1.7B). Contiguous runs of transformer blocks are merged into single blocks, then the student is recovered by local reconstruction and global distillation. The **AI 360 Project Proposal** ([docs/Project Proposal.md](docs/Project%20Proposal.md), a full transcription of the original PDF) is the authoritative spec; "Project idea ai360" supplies only background and the 20%/35% compression targets. Experiments run on Alliance Canada clusters (Narval A100 / Fir H100) through Slurm.
+Probe-guided depth compression for decoder-only LMs (primary: Qwen3-0.6B, 28 blocks; stretch: Qwen3-1.7B). Contiguous runs of transformer blocks are merged into single blocks, then the student is recovered by local reconstruction and global distillation. The **AI 360 Project Proposal** ([docs/Project Proposal.md](docs/Project%20Proposal.md), a full transcription of the original PDF) is the authoritative spec; "Project idea ai360" supplies only background and the 20%/35% compression targets. Experiments run on Alliance Canada clusters (Narval A100 / Fir H100) through Slurm, or on a local GPU with `--cluster local`.
 
 ## Commands
 
@@ -18,7 +18,7 @@ ruff check src tests                               # lint (line length 100, py31
 
 # Local verification as documented in README
 python -m compileall -q src tests
-bash -n scripts/*.sh scripts/slurm/*.sbatch
+bash -n scripts/*.sh scripts/lib/*.sh scripts/local/*.sh scripts/slurm/*.sbatch
 ```
 
 The tests are `unittest.TestCase` classes run under pytest. They skip themselves when an optional dependency (transformers, safetensors) is missing. Model tests build a tiny random `Qwen3Config` (3 layers, hidden size 32), so they need no downloads or GPU. The CLI tests patch `run_stage*` and `run_evaluation` on the `cli` module.
@@ -33,6 +33,8 @@ llm-compression <command> --config configs/main.yaml [--set dotted.key=value ...
 ```
 
 `plan` only writes `experiment_plan.json` and is safe to run anywhere. On the cluster, always use the launchers with `--dry-run` first. `submit_pipeline.sh` and `submit_baseline_pipeline.sh` submit jobs unless `--dry-run` is passed. `submit_ablation_sweep.sh` is a dry run unless `--submit` is passed. Never submit jobs without the user's explicit go-ahead. The default Slurm account is `def-krallen`.
+
+**Local GPU.** Every launcher also accepts `--cluster local`. It builds the same job graph and flags, but runs each job in the foreground, in submission order (a topological order of the `afterok` graph), through `scripts/local/run_local.sh` → `run_stage.sh` with `LLMC_CLUSTER=local`. The shared logic is in `scripts/lib/local_backend.sh`. A failed job stops the launcher. Succeeded jobs are recorded in `<output root>/.local_jobs/` and skipped on rerun (`LLMC_LOCAL_RERUN=1` overrides). Logs go to `logs/local/`. In local mode, `run_stage.sh` maps Ctrl-C/TERM to the same USR1 checkpoint path and exits non-zero, so the launcher stops instead of moving on to the next chunk. Local runs also need a prior `scripts/prefetch.sh`, because jobs still force HF offline mode. When you add a launcher feature, keep the local branch of `submit_job` in sync with the sbatch branch.
 
 ## Architecture
 

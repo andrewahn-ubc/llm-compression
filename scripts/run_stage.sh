@@ -120,12 +120,18 @@ fi
 child_pid=""
 watchdog_pid=""
 forward_usr1() {
-  echo "Received Slurm pre-timeout signal; requesting a checkpoint" >&2
+  echo "Checkpoint requested (Slurm pre-timeout signal or local interrupt)" >&2
   touch "${checkpoint_root}/signal-${SLURM_JOB_ID:-local}"
   if [[ -n "${child_pid}" ]] && kill -0 "${child_pid}" 2>/dev/null; then
     kill -USR1 "${child_pid}"
     (
-      sleep 240
+      # Kill the sleep along with this subshell; an orphaned sleep would keep
+      # stdout open and stall a local launcher's log pipe for the full period.
+      sleep_pid=""
+      trap '[[ -n "${sleep_pid}" ]] && kill "${sleep_pid}" 2>/dev/null; exit 0' TERM
+      sleep 240 &
+      sleep_pid=$!
+      wait "${sleep_pid}"
       if kill -0 "${child_pid}" 2>/dev/null; then
         echo "Checkpoint grace period expired; terminating child" >&2
         kill -TERM "${child_pid}"
@@ -135,6 +141,29 @@ forward_usr1() {
   fi
 }
 trap forward_usr1 USR1
+
+# On a local GPU there is no scheduler signal. Ctrl-C or TERM instead requests
+# the same cooperative checkpoint, and a second one terminates the child at
+# once. The step then exits non-zero even if the child saved and exited
+# cleanly, so a local launcher stops instead of moving on to the next chunk.
+# The child itself ignores SIGINT because a non-interactive shell starts
+# background jobs that way.
+interrupted=0
+local_interrupt() {
+  if ((interrupted)); then
+    echo "Second interrupt; terminating child" >&2
+    if [[ -n "${child_pid}" ]] && kill -0 "${child_pid}" 2>/dev/null; then
+      kill -TERM "${child_pid}" 2>/dev/null || true
+    fi
+    return
+  fi
+  interrupted=1
+  echo "Interrupted; checkpointing if this stage supports it (interrupt again to kill)" >&2
+  forward_usr1
+}
+if [[ "${LLMC_CLUSTER:-local}" == "local" ]]; then
+  trap local_interrupt INT TERM
+fi
 
 echo "cluster=${LLMC_CLUSTER:-local} command=${command_name} config=${config_path}"
 "${cli[@]}" &
@@ -156,5 +185,8 @@ done
 if [[ -n "${watchdog_pid}" ]]; then
   kill "${watchdog_pid}" 2>/dev/null || true
   wait "${watchdog_pid}" 2>/dev/null || true
+fi
+if ((interrupted && status == 0)); then
+  status=130
 fi
 exit "${status}"
